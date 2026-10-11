@@ -8,6 +8,7 @@ app.use(express.json());
 app.use(cors());
 
 const DATA_FILE = path.join(__dirname, 'data.json');
+
 type Status = 'to_do' | 'pending' | 'in_progress' | 'done';
 
 interface AuditLog {
@@ -60,7 +61,10 @@ app.get('/tasks', (req: Request, res: Response) => {
 
 app.post('/tasks', (req: Request, res: Response) => {
   const { title, description } = req.body;
-  if (!title) return res.status(400).json({ error: 'Title is required' });
+  if (!title) {
+    return res.status(400).json({ error: 'Title is required' });
+  }
+
   const db = readDb();
   const newTask: Task = {
     id: Date.now().toString(),
@@ -69,6 +73,7 @@ app.post('/tasks', (req: Request, res: Response) => {
     status: 'to_do',
     createdAt: new Date().toISOString(),
   };
+
   db.tasks.push(newTask);
   writeDb(db);
   res.status(201).json(newTask);
@@ -77,19 +82,32 @@ app.post('/tasks', (req: Request, res: Response) => {
 app.put('/tasks/:id/status', (req: Request, res: Response) => {
   const { id } = req.params;
   const { newStatus, actor } = req.body as { newStatus: Status; actor: string };
-  if (!actor) return res.status(400).json({ error: 'Actor is required' });
+
+  if (!actor) {
+    return res.status(400).json({ error: 'Actor is required' });
+  }
+
   const db = readDb();
   const task = db.tasks.find((t) => t.id === id);
-  if (!task) return res.status(404).json({ error: 'Task not found' });
-  if (task.status === newStatus) return res.json({ message: 'Up to date', task });
 
-  const allowed = VALID_TRANSITIONS[task.status] || [];
-  if (!allowed.includes(newStatus)) {
-    return res.status(400).json({ error: `Invalid transition from ${task.status} to ${newStatus}` });
+  if (!task) {
+    return res.status(404).json({ error: 'Task not found' });
+  }
+
+  if (task.status === newStatus) {
+    return res.json({ message: 'Status is already up to date', task });
+  }
+
+  const allowedNextSteps = VALID_TRANSITIONS[task.status] || [];
+  if (!allowedNextSteps.includes(newStatus)) {
+    return res.status(400).json({
+      error: `Invalid status transition from '${task.status}' to '${newStatus}'. Allowed: ${allowedNextSteps.join(', ')}`,
+    });
   }
 
   const oldStatus = task.status;
   task.status = newStatus;
+
   const newLog: AuditLog = {
     id: Date.now().toString() + Math.random().toString(36).substring(2, 5),
     taskId: task.id,
@@ -98,25 +116,36 @@ app.put('/tasks/:id/status', (req: Request, res: Response) => {
     newStatus,
     timestamp: new Date().toISOString(),
   };
+
   db.auditLogs.push(newLog);
   writeDb(db);
+
   res.json({ task, log: newLog });
 });
 
 app.delete('/tasks/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   const db = readDb();
-  const idx = db.tasks.findIndex((t) => t.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Task not found' });
-  db.tasks.splice(idx, 1);
+  
+  const taskIndex = db.tasks.findIndex((t) => t.id === id);
+  if (taskIndex === -1) {
+    return res.status(404).json({ error: 'Task not found' });
+  }
+
+  db.tasks.splice(taskIndex, 1);
   writeDb(db);
-  res.json({ message: 'Deleted' });
+
+  res.json({ message: 'Task deleted successfully' });
 });
 
 app.get('/tasks/:id/audit-logs', (req: Request, res: Response) => {
   const { id } = req.params;
   const db = readDb();
-  res.json(db.auditLogs.filter((l) => l.taskId === id));
+  const logs = db.auditLogs.filter((log) => log.taskId === id);
+  res.json(logs);
 });
 
-app.listen(5000, () => console.log('Server running on port 5000'));
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
