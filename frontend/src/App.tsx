@@ -83,7 +83,7 @@ export default function App() {
     <div style={{ maxWidth: 800, margin: '20px auto', fontFamily: 'sans-serif', padding: 20 }}>
       <h2>Mini Task Manager & Audit Log</h2>
       {errorMsg && <div style={{ background: '#ffd2d2', color: '#900', padding: 10, marginBottom: 10 }}>{errorMsg}</div>}
-
+      
       <div style={{ marginBottom: 15 }}>
         <label>Actor: </label>
         <select value={selectedActor} onChange={(e) => setSelectedActor(e.target.value)}>
